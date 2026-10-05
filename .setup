@@ -1,0 +1,137 @@
+#!/bin/env bash
+
+# ------------------------------------------------------------------------------
+# Symbolic link creation function.
+# ------------------------------------------------------------------------------
+
+createSymlink(){
+  # $1: "junction" or "symlink"
+  # $2: <source path>
+  # $3: <target link>
+  case "$1" in
+    junction)
+      local sourcePath="$2"
+      local targetPath="$3"
+      local sourcePathPS=$(echo "$sourcePath" | sed 's,/,\\,g')
+      local targetLinkPS=$(echo "$targetPath" | sed 's,/,\\,g')
+      echo "  * Attempting copy: SRC ($sourcePathPS) into DST ($targetLinkPS)"
+      [[ -f "$sourcePath" ]] && {
+        echo "  * Source ($sourcePath) WAS found!"
+        powershell.exe -Command "New-Item -ItemType Junction -Path '$targetLinkPS' -Value '$sourcePathPS'" #> /dev/null
+        [[ -f "$targetPath" ]] || {
+          echo "  X DST ($targetPath) not found!"
+          exit 1
+        }
+      } || {
+        echo "  X SRC ($sourcePath) not found!"
+        exit 2
+      }
+      return 0
+    ;;
+  symlink)
+    ln -sf "$2" "$3"
+  ;;
+  esac
+}
+
+# ------------------------------------------------------------------------------
+# Copy creation function.
+# ------------------------------------------------------------------------------
+
+createCopy(){
+  # $1: <source path>
+  # $2: <target link>
+  cp "$1" "$2"
+}
+
+# ------------------------------------------------------------------------------
+# Transfer from DST to OUT.
+# ------------------------------------------------------------------------------
+
+xfer(){
+
+  # Get sbin's relative path.
+  export SBIN_R="env/sbin"
+
+  # Figure out absolute path.
+  case "$SYS_R" in
+    mingw64*)
+      export SBIN_A="c:/dev/R/$SBIN_R"
+    ;;
+    *)
+      export SBIN_A="$HOME/R/$SBIN_R"
+    ;;
+  esac
+  export SRC="$SBIN_A/.$1/$2"
+  export DST="$SBIN_A"
+
+  # Declare the scripts to copy/symlink.
+  local SCRIPTS=("chrome-build"                                                 \
+    "chrome-perf"                                                               \
+    "chrome-find"                                                               \
+    "chrome-run"                                                                \
+    "chrome-sym"                                                                \
+    "git-sync-visitor"                                                          \
+    "git-sync"                                                                  \
+    "share"                                                                     \
+    "sfind"                                                                     \
+    "sar"                                                                       \
+    "gi"                                                                        \
+    "gs"                                                                        \
+    "gb"                                                                        \
+    "br")
+
+  # Create symlinks or copies.
+  case "$2" in
+    zsh) # Z Shell
+      for i in "${SCRIPTS[@]}"; do
+        local A="$SRC/$i"
+        local B="$DST/"
+        echo "  * Symlinking $A"
+        createSymlink symlink "$A" "$B"
+      done
+    ;;
+    bash) # Bourne Again SHell
+      for i in "${SCRIPTS[@]}"; do
+        local A="$SRC/$i"
+        local B="$DST/"
+        echo "  * Symlinking $A"
+        createSymlink symlink "$A" "$B"
+      done
+    ;;
+    sh) # Mingw SHell
+      for i in "${SCRIPTS[@]}"; do
+        local A="$SRC/$i"
+        local B="$DST/"
+        echo "  * Copying $A"
+        createCopy "$A" "$B"
+      done
+    ;;
+    *)
+      echo "Unknown shell"
+      exit 4
+    ;;
+  esac
+}
+
+main(){
+  export SYS_R=`uname -s | tr '[:upper:]' '[:lower:]'`
+  export CPU_R=`uname -m | tr '[:upper:]' '[:lower:]'`
+  [[ $# -eq 0 ]] && {
+    case "$SYS_R" in
+      mingw64*)
+        xfer "mingw" "sh"
+      ;;
+      darwin)
+        xfer "darwin" "zsh"
+      ;;
+      linux)
+        xfer "linux" "bash"
+      ;;
+    esac
+  }
+}
+
+main "$@"
+
+# vim:ft=bash sw=2 ts=2 et nowrap
